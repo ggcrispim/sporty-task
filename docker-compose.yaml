@@ -1,0 +1,70 @@
+version: '3.8'
+services:
+  kafka-broker:
+    image: apache/kafka:latest
+    container_name: broker
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 1
+    networks:
+      - kafka-network
+  namesrv:
+    image: apache/rocketmq:5.3.2
+    container_name: rmqnamesrv
+    ports:
+      - 9876:9876
+    networks:
+      - rocketmq
+    command: sh mqnamesrv
+  broker:
+      image: apache/rocketmq:5.3.2
+      container_name: rmqbroker
+      ports:
+        - 10909:10909
+        - 10911:10911
+        - 10912:10912
+      environment:
+        - NAMESRV_ADDR=rmqnamesrv:9876
+      depends_on:
+        - namesrv
+      networks:
+        - rocketmq
+      volumes:
+        - ./rocketmq-broker.conf:/home/rocketmq/rocketmq-5.3.2/conf/broker.conf
+      command: sh mqbroker -c /home/rocketmq/rocketmq-5.3.2/conf/broker.conf
+  proxy:
+      image: apache/rocketmq:5.3.2
+      container_name: rmqproxy
+      networks:
+        - rocketmq
+      depends_on:
+        - broker
+        - namesrv
+      ports:
+        - 8080:8080
+        - 8081:8081
+      restart: on-failure
+      environment:
+        - NAMESRV_ADDR=rmqnamesrv:9876
+      command: sh mqproxy
+
+networks:
+  kafka-network:
+    driver: bridge
+  rocketmq:
+    driver: bridge
+
+
